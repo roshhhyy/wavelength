@@ -549,8 +549,33 @@ export default function WavelengthGame() {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&display=swap');
 @keyframes pulse-ring{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.08);opacity:.85}}`}</style>
 
+      {/* Top utility toolbar — sits above the logo so it never overlaps on mobile */}
+      {((ph !== PH.SETUP && ph !== PH.END) || historyEntries.length > 0) && (
+        <div style={{
+          display: "flex", justifyContent: "flex-end", gap: 8,
+          width: "100%", maxWidth: 600, marginBottom: 4,
+        }}>
+          {ph !== PH.SETUP && ph !== PH.END && (
+            <button onClick={requestNewGame} style={{
+              padding: "6px 14px", borderRadius: 999, fontSize: 11, fontWeight: 700,
+              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
+              color: "#94a3b8", cursor: "pointer", letterSpacing: 1, textTransform: "uppercase",
+            }}>New Game</button>
+          )}
+          {historyEntries.length > 0 && (
+            <button onClick={() => setShowHistory(true)} style={{
+              padding: "6px 14px", borderRadius: 999, fontSize: 11, fontWeight: 700,
+              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
+              color: "#94a3b8", cursor: "pointer", letterSpacing: 1, textTransform: "uppercase",
+            }}>History ({historyEntries.length})</button>
+          )}
+        </div>
+      )}
+
       <h1 style={{
-        fontSize: 40, fontWeight: 900, letterSpacing: 8, margin: "0 0 16px", textTransform: "uppercase",
+        fontSize: "clamp(28px, 9vw, 40px)", fontWeight: 900,
+        letterSpacing: "clamp(3px, 1.5vw, 8px)",
+        margin: "0 0 16px", textTransform: "uppercase",
         background: "linear-gradient(135deg, #f472b6 0%, #818cf8 40%, #38bdf8 70%, #34d399 100%)",
         WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
       }}>Wavelength</h1>
@@ -565,24 +590,6 @@ export default function WavelengthGame() {
           zIndex: 90, cursor: "pointer", backdropFilter: "blur(8px)",
         }}>Resumed from earlier</div>
       )}
-
-      {/* Top-right utility links */}
-      <div style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 8 }}>
-        {ph !== PH.SETUP && ph !== PH.END && (
-          <button onClick={requestNewGame} style={{
-            padding: "6px 14px", borderRadius: 999, fontSize: 11, fontWeight: 700,
-            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
-            color: "#94a3b8", cursor: "pointer", letterSpacing: 1, textTransform: "uppercase",
-          }}>New Game</button>
-        )}
-        {historyEntries.length > 0 && (
-          <button onClick={() => setShowHistory(true)} style={{
-            padding: "6px 14px", borderRadius: 999, fontSize: 11, fontWeight: 700,
-            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
-            color: "#94a3b8", cursor: "pointer", letterSpacing: 1, textTransform: "uppercase",
-          }}>History ({historyEntries.length})</button>
-        )}
-      </div>
 
       {/* ═══════════ SETUP ═══════════ */}
       {ph === PH.SETUP && (
@@ -603,16 +610,6 @@ export default function WavelengthGame() {
               <button onClick={() => setNumTeams(n => Math.max(2, n - 1))} style={stepBtn}>−</button>
               <span style={bigNum}>{numTeams}</span>
               <button onClick={() => setNumTeams(n => Math.min(6, n + 1))} style={stepBtn}>+</button>
-            </div>
-          </div>
-
-          {/* Turns per player */}
-          <div style={setupBox}>
-            <div style={setupLabel}>Turns per Player</div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20 }}>
-              <button onClick={() => setTurnsPerPlayer(n => Math.max(1, n - 1))} style={stepBtn}>−</button>
-              <span style={bigNum}>{turnsPerPlayer}</span>
-              <button onClick={() => setTurnsPerPlayer(n => Math.min(5, n + 1))} style={stepBtn}>+</button>
             </div>
           </div>
 
@@ -649,6 +646,16 @@ export default function WavelengthGame() {
                 </div>
               );
             })}
+          </div>
+
+          {/* Turns per player */}
+          <div style={setupBox}>
+            <div style={setupLabel}>Turns per Player</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20 }}>
+              <button onClick={() => setTurnsPerPlayer(n => Math.max(1, n - 1))} style={stepBtn}>−</button>
+              <span style={bigNum}>{turnsPerPlayer}</span>
+              <button onClick={() => setTurnsPerPlayer(n => Math.min(5, n + 1))} style={stepBtn}>+</button>
+            </div>
           </div>
 
           <p style={{ fontSize: 12, color: "#475569", margin: "0 0 20px" }}>

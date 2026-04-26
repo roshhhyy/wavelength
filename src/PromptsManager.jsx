@@ -23,34 +23,39 @@ function ToggleDot({ on, color }) {
   );
 }
 
-function PromptCard({ prompt, enabled, onToggle, categoryColor }) {
+function PromptCard({ prompt, enabled, onToggle, onView, categoryColor }) {
   const diff = DIFF_STYLES[prompt.difficulty];
+  const handleKey = (e) => {
+    if (e.key === " " || e.key === "Enter") { e.preventDefault(); onToggle(); }
+  };
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onToggle}
+      onKeyDown={handleKey}
       style={{
-        display: "flex", alignItems: "center", gap: 12,
-        width: "100%", padding: "10px 14px", borderRadius: 12,
+        display: "flex", alignItems: "center", gap: 10,
+        width: "100%", padding: "10px 10px 10px 14px", borderRadius: 12,
         background: enabled ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.015)",
         border: `1px solid ${enabled ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)"}`,
-        cursor: "pointer", textAlign: "left", color: "inherit", fontFamily: "inherit",
+        cursor: "pointer",
         opacity: enabled ? 1 : 0.45,
         transition: "all 0.15s",
+        outline: "none",
       }}
       onMouseEnter={e => { e.currentTarget.style.background = enabled ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.04)"; }}
       onMouseLeave={e => { e.currentTarget.style.background = enabled ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.015)"; }}
     >
       <ToggleDot on={enabled} color={categoryColor} />
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "#e2e8f0" }}>
-          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {prompt.left}
-          </span>
-          <span style={{ color: "#475569", flexShrink: 0 }}>↔</span>
-          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {prompt.right}
-          </span>
-        </div>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "#e2e8f0", minWidth: 0 }}>
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {prompt.left}
+        </span>
+        <span style={{ color: "#475569", flexShrink: 0 }}>↔</span>
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {prompt.right}
+        </span>
       </div>
       <div style={{
         padding: "2px 8px", borderRadius: 999, fontSize: 9, fontWeight: 800, letterSpacing: 1,
@@ -58,7 +63,23 @@ function PromptCard({ prompt, enabled, onToggle, categoryColor }) {
       }}>
         {diff.label}
       </div>
-    </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); onView(prompt); }}
+        aria-label="View full prompt"
+        title="View full prompt"
+        style={{
+          width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+          background: "rgba(255,255,255,0.04)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          color: "#94a3b8", cursor: "pointer", padding: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontFamily: "Georgia, serif", fontStyle: "italic", fontSize: 13, fontWeight: 700,
+          lineHeight: 1,
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#cbd5e1"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "#94a3b8"; }}
+      >i</button>
+    </div>
   );
 }
 
@@ -66,6 +87,7 @@ export default function PromptsManager({ initialDisabled, onSave, onClose }) {
   const [draft, setDraft] = useState(() => new Set(initialDisabled));
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [confirmClose, setConfirmClose] = useState(false);
+  const [viewing, setViewing] = useState(null);
 
   const toggleCollapse = (catKey) => {
     setCollapsed(prev => {
@@ -262,6 +284,7 @@ export default function PromptsManager({ initialDisabled, onSave, onClose }) {
                         prompt={p}
                         enabled={!draft.has(promptKey(p))}
                         onToggle={() => togglePrompt(p)}
+                        onView={() => setViewing(p)}
                         categoryColor={catColor}
                       />
                     ))}
@@ -282,6 +305,68 @@ export default function PromptsManager({ initialDisabled, onSave, onClose }) {
           )}
         </div>
       </div>
+
+      {/* Prompt detail */}
+      {viewing && (() => {
+        const p = viewing;
+        const cat = CATEGORIES[p.category];
+        const catColor = `hsl(${cat.hue}, 70%, 65%)`;
+        const diff = DIFF_STYLES[p.difficulty];
+        const enabled = !draft.has(promptKey(p));
+        return (
+          <div style={{
+            position: "fixed", inset: 0, background: "rgba(5,8,14,0.78)", zIndex: 300,
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+            backdropFilter: "blur(4px)",
+          }} onClick={() => setViewing(null)}>
+            <div onClick={e => e.stopPropagation()} style={{
+              background: "linear-gradient(180deg, #161e2f 0%, #0f1422 100%)",
+              border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20,
+              padding: "28px 28px 24px", maxWidth: 500, width: "100%",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+            }}>
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+                marginBottom: 20,
+              }}>
+                <div style={{
+                  fontSize: 11, color: catColor, fontWeight: 800, letterSpacing: 2,
+                  textTransform: "uppercase",
+                }}>{cat.label}</div>
+                <div style={{
+                  padding: "3px 10px", borderRadius: 999, fontSize: 10, fontWeight: 800, letterSpacing: 1,
+                  background: diff.bg, color: diff.color, border: `1px solid ${diff.border}`,
+                }}>{diff.label}</div>
+              </div>
+              <div style={{ textAlign: "center", padding: "8px 4px 16px" }}>
+                <div style={{
+                  fontSize: 22, fontWeight: 700, color: "#f8fafc", lineHeight: 1.3,
+                }}>{p.left}</div>
+                <div style={{
+                  fontSize: 32, color: catColor, margin: "14px 0", opacity: 0.7,
+                }}>↔</div>
+                <div style={{
+                  fontSize: 22, fontWeight: 700, color: "#f8fafc", lineHeight: 1.3,
+                }}>{p.right}</div>
+              </div>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 18 }}>
+                <button onClick={() => setViewing(null)} style={{
+                  padding: "10px 20px", borderRadius: 999,
+                  background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+                  color: "#94a3b8", cursor: "pointer", fontSize: 13, fontWeight: 700,
+                }}>Close</button>
+                <button onClick={() => { togglePrompt(p); }} style={{
+                  padding: "10px 20px", borderRadius: 999, border: "none",
+                  background: enabled ? "rgba(239,68,68,0.15)" : catColor,
+                  color: enabled ? "#fca5a5" : "#0b1018",
+                  cursor: "pointer", fontSize: 13, fontWeight: 800, letterSpacing: 0.5,
+                  boxShadow: enabled ? "none" : `0 0 20px ${catColor}40`,
+                }}>{enabled ? "Disable" : "Enable"}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Discard confirm */}
       {confirmClose && (
