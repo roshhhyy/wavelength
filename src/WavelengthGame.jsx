@@ -1,79 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-
-const PROMPTS = [
-  ["Terrible superpower","Amazing superpower"],["Worst way to die","Best way to die"],
-  ["Bad pizza topping","Great pizza topping"],["Forgettable movie","Unforgettable movie"],
-  ["Boring hobby","Fascinating hobby"],["Useless invention","World-changing invention"],
-  ["Awful first date","Perfect first date"],["Terrible pet","Perfect pet"],
-  ["Bad thing to say at a wedding","Great thing to say at a wedding"],["Overrated","Underrated"],
-  ["Worst smell","Best smell"],["Bad Halloween costume","Iconic Halloween costume"],
-  ["Nobody wants this skill","Everyone wants this skill"],["Terrible band name","Incredible band name"],
-  ["Worst celebrity to be stuck in an elevator with","Best celebrity to be stuck in an elevator with"],
-  ["Bad life advice","Great life advice"],["Least cool animal","Coolest animal"],
-  ["Worst thing to find in your pocket","Best thing to find in your pocket"],
-  ["Terrible restaurant theme","Amazing restaurant theme"],["Not impressive at all","Extremely impressive"],
-  ["Worst thing to be famous for","Best thing to be famous for"],
-  ["Bad vacation destination","Dream vacation destination"],
-  ["Least satisfying sound","Most satisfying sound"],["Terrible middle name","Awesome middle name"],
-  ["Worst age to be","Best age to be"],["Bad thing to automate","Great thing to automate"],
-  ["Least romantic gesture","Most romantic gesture"],
-  ["Worst food to eat on a first date","Best food to eat on a first date"],
-  ["Useless in a zombie apocalypse","Essential in a zombie apocalypse"],
-  ["Bad tattoo idea","Great tattoo idea"],["Worst Olympic sport to add","Best Olympic sport to add"],
-  ["Least intimidating","Most intimidating"],
-  ["Terrible thing to whisper to a stranger","OK thing to whisper to a stranger"],
-  ["Worst historical era to live in","Best historical era to live in"],
-  ["Least fun game","Most fun game"],["Bad reason to call 911","Good reason to call 911"],
-  ["Worst thing to step on barefoot","Best thing to step on barefoot"],
-  ["Least useful school subject","Most useful school subject"],
-  ["Worst thing to forget","Best thing to forget"],["Terrible Wi-Fi password","Clever Wi-Fi password"],
-  ["Worst way to start a speech","Best way to start a speech"],["Least relaxing","Most relaxing"],
-  ["Bad thing to collect","Cool thing to collect"],["Worst song to wake up to","Best song to wake up to"],
-  ["Terrible party theme","Amazing party theme"],
-  ["Least trustworthy profession","Most trustworthy profession"],
-  ["Worst thing to drop from a building","Funniest thing to drop from a building"],
-  ["Bad name for a boat","Perfect name for a boat"],["Least photogenic","Most photogenic"],
-  ["Worst excuse for being late","Most creative excuse for being late"],
-  ["Terrible ice cream flavor","Best ice cream flavor"],
-  ["Least rewatchable movie","Most rewatchable movie"],["Bad last words","Legendary last words"],
-  ["Worst way to propose","Best way to propose"],["Least comforting","Most comforting"],
-  ["Terrible thing to put on a resume","Impressive thing to put on a resume"],
-  ["Worst thing to say to your boss","Best thing to say to your boss"],
-  ["Least cool way to arrive","Coolest way to arrive"],
-  ["Bad thing to yell in a library","OK thing to yell in a library"],
-  ["Worst childhood memory","Best childhood memory"],
-  ["Least appetizing food color","Most appetizing food color"],
-  ["Terrible password","Uncrackable password"],
-  ["Worst ride at a theme park","Best ride at a theme park"],
-  ["Least charismatic","Most charismatic"],["Bad thing to name your child","Great thing to name your child"],
-  ["Worst item to have only one of","Best item to have only one of"],
-  ["Least useful kitchen gadget","Most useful kitchen gadget"],
-  ["Terrible thing to say in a job interview","Perfect thing to say in a job interview"],
-  ["Worst breakfast food","Best breakfast food"],["Least scary monster","Most terrifying monster"],
-  ["Bad road trip car","Perfect road trip car"],["Worst compliment","Best compliment"],
-  ["Least useful app","Most useful app"],["Terrible alarm sound","Perfect alarm sound"],
-  ["Worst thing to sit next to on a plane","Best thing to sit next to on a plane"],
-  ["Least fun chore","Most satisfying chore"],
-  ["Bad thing to be allergic to","Good thing to be allergic to"],
-  ["Worst conspiracy theory","Most believable conspiracy theory"],["Least festive","Most festive"],
-  ["Terrible thing to automate with AI","Perfect thing to automate with AI"],
-  ["Worst sandwich filling","Best sandwich filling"],
-  ["Least athletic activity","Most athletic activity"],
-  ["Bad theme for a wedding","Amazing theme for a wedding"],
-  ["Worst thing to lose","Best thing to lose"],["Least funny joke topic","Funniest joke topic"],
-  ["Terrible thing to 3D print","Coolest thing to 3D print"],
-  ["Worst museum exhibit","Best museum exhibit"],["Least portable","Most portable"],
-  ["Bad thing to bring camping","Essential thing to bring camping"],
-  ["Worst text to send to the wrong person","Harmless text to send to the wrong person"],
-  ["Least dramatic","Most dramatic"],["Terrible trivia category","Best trivia category"],
-  ["Worst way to spend a million dollars","Best way to spend a million dollars"],
-  ["Least nostalgic","Most nostalgic"],
-  ["Bad thing to do in zero gravity","Awesome thing to do in zero gravity"],
-  ["Worst thing to run out of","Best thing to run out of"],["Least iconic","Most iconic"],
-  ["Terrible voicemail greeting","Best voicemail greeting"],
-  ["Worst thing to discover about your neighbor","Best thing to discover about your neighbor"],
-  ["Least futuristic","Most futuristic"],
-];
+import { PROMPTS } from "./prompts";
 
 const DEFAULT_TEAMS = [
   { name: "Team Alpha", hue: 0, players: 3 },
@@ -245,7 +171,7 @@ function TeamCard({ t, s, score, active, won, turnsUsed, turnsTotal }) {
 /* ═══════════════════════════════════════════════════════════════════
    PERSISTENCE
    ═══════════════════════════════════════════════════════════════════ */
-const STORAGE_VERSION = 1;
+const STORAGE_VERSION = 2;
 const KEY_CURRENT = "wavelength:current";
 const KEY_HISTORY = "wavelength:history";
 const HISTORY_MAX = 100;
@@ -416,6 +342,30 @@ export default function WavelengthGame() {
 
   const togglePause = () => setPaused(p => !p);
   const hideTarget = () => setPh(PH.GUESS);
+
+  // Hold-to-skip the LOOK countdown (designed so accidental taps don't skip)
+  const SKIP_HOLD_MS = 800;
+  const skipHoldTimer = useRef(null);
+  const [skipHolding, setSkipHolding] = useState(false);
+  const startSkipHold = useCallback(() => {
+    if (ph !== PH.LOOK) return;
+    setSkipHolding(true);
+    skipHoldTimer.current = setTimeout(() => {
+      skipHoldTimer.current = null;
+      setSkipHolding(false);
+      setCd(0);
+      setPh(PH.PSYCHIC);
+    }, SKIP_HOLD_MS);
+  }, [ph]);
+  const cancelSkipHold = useCallback(() => {
+    if (skipHoldTimer.current) {
+      clearTimeout(skipHoldTimer.current);
+      skipHoldTimer.current = null;
+    }
+    setSkipHolding(false);
+  }, []);
+  // Clean up the timer if phase changes mid-hold
+  useEffect(() => () => { if (skipHoldTimer.current) clearTimeout(skipHoldTimer.current); }, []);
   const lockGuess = () => setPh(PH.COUNTER);
 
   const skipPrompt = () => {
@@ -707,6 +657,30 @@ export default function WavelengthGame() {
           <button onClick={togglePause} style={{ ...ghost, marginTop: 24, padding: "10px 28px", fontSize: 14 }}>
             {paused ? "Resume" : "Pause"}
           </button>
+          <button
+            onPointerDown={startSkipHold}
+            onPointerUp={cancelSkipHold}
+            onPointerLeave={cancelSkipHold}
+            onPointerCancel={cancelSkipHold}
+            style={{
+              marginTop: 10, padding: "6px 18px", borderRadius: 999,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background: "rgba(255,255,255,0.02)", color: "#475569",
+              fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700,
+              cursor: "pointer", position: "relative", overflow: "hidden",
+              userSelect: "none", touchAction: "none", minWidth: 140,
+            }}
+          >
+            <span aria-hidden="true" style={{
+              position: "absolute", top: 0, left: 0, bottom: 0,
+              background: tmS.dim,
+              width: skipHolding ? "100%" : "0%",
+              transition: skipHolding ? `width ${SKIP_HOLD_MS}ms linear` : "width 0.15s ease",
+            }} />
+            <span style={{ position: "relative" }}>
+              {skipHolding ? "Keep holding…" : "Hold to skip"}
+            </span>
+          </button>
         </div>
       )}
 
@@ -837,11 +811,11 @@ export default function WavelengthGame() {
           }}>
             <div style={labelBox("#ef4444", "left")}>
               <span style={{ fontSize: 10, color: "#fca5a5", textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700 }}>Left</span>
-              <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.3 }}>{prompt[0]}</span>
+              <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.3 }}>{prompt.left}</span>
             </div>
             <div style={labelBox("#22c55e", "right")}>
               <span style={{ fontSize: 10, color: "#86efac", textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700 }}>Right</span>
-              <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.3 }}>{prompt[1]}</span>
+              <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.3 }}>{prompt.right}</span>
             </div>
           </div>
 
