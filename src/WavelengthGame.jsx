@@ -1,6 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { PROMPTS, promptKey } from "./prompts";
 import PromptsManager from "./PromptsManager";
+import CouplesMode from "./CouplesMode";
+import { Dial } from "./Dial";
+import { ts, randomTarget, getScore, scoreLbl, scoreClr } from "./dialMath";
 
 const DEFAULT_TEAMS = [
   { name: "Team Alpha", hue: 0, players: 3 },
@@ -11,134 +14,7 @@ const DEFAULT_TEAMS = [
   { name: "Team Foxtrot", hue: 190, players: 3 },
 ];
 
-function ts(hue) {
-  return {
-    color: `hsl(${hue},80%,65%)`,
-    accent: `hsl(${hue},70%,80%)`,
-    bg: `hsla(${hue},80%,55%,0.08)`,
-    border: `hsla(${hue},80%,55%,0.25)`,
-    dim: `hsla(${hue},60%,50%,0.15)`,
-  };
-}
-
-const CX = 300, CY = 300, R = 260, IR = 44;
-const deg2rad = d => (d * Math.PI) / 180;
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const LOOK_SECS = 5;
-const BULL_HALF = 4;
-
-function randomTarget() {
-  return Math.random() * (180 - BULL_HALF) + BULL_HALF / 2;
-}
-
-function getScore(needle, target) {
-  const d = Math.abs(needle - target);
-  if (d <= 4) return 4;
-  if (d <= 11) return 3;
-  if (d <= 20) return 2;
-  return 0;
-}
-const scoreLbl = s => s === 4 ? "BULLSEYE!" : s === 3 ? "Close!" : s === 2 ? "Near" : "Miss";
-const scoreClr = s => s === 4 ? "#c084fc" : s === 3 ? "#60a5fa" : s === 2 ? "#fbbf24" : "#64748b";
-
-/* ═══════════════════════════════════════════════════════════════════
-   DIAL
-   ═══════════════════════════════════════════════════════════════════ */
-function Dial({ needleAngle, targetAngle, showTarget, onNeedleChange, locked, teamColor }) {
-  const svgRef = useRef(null);
-  const [dragging, setDragging] = useState(false);
-
-  const toXY = (deg, r) => {
-    const rad = deg2rad(180 - deg);
-    return [CX + r * Math.cos(rad), CY - r * Math.sin(rad)];
-  };
-
-  const ptrToAngle = useCallback((cx, cy) => {
-    const svg = svgRef.current;
-    if (!svg) return 90;
-    const rc = svg.getBoundingClientRect();
-    const sx = 600 / rc.width, sy = 340 / rc.height;
-    const x = (cx - rc.left) * sx - CX;
-    const y = CY - (cy - rc.top) * sy;
-    return clamp(180 - Math.atan2(y, x) * (180 / Math.PI), 2, 178);
-  }, []);
-
-  const down = useCallback(e => {
-    if (locked) return;
-    e.preventDefault(); setDragging(true);
-    const p = e.touches ? e.touches[0] : e;
-    onNeedleChange(ptrToAngle(p.clientX, p.clientY));
-  }, [locked, onNeedleChange, ptrToAngle]);
-
-  const move = useCallback(e => {
-    if (!dragging || locked) return;
-    e.preventDefault();
-    const p = e.touches ? e.touches[0] : e;
-    onNeedleChange(ptrToAngle(p.clientX, p.clientY));
-  }, [dragging, locked, onNeedleChange, ptrToAngle]);
-
-  const up = useCallback(() => { setDragging(false); }, []);
-
-  useEffect(() => {
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-    window.addEventListener("touchmove", move, { passive: false });
-    window.addEventListener("touchend", up);
-    return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up);
-      window.removeEventListener("touchmove", move); window.removeEventListener("touchend", up); };
-  }, [move, up]);
-
-  const fullWedge = () => {
-    const [ox1, oy1] = toXY(0, R);
-    const [ox2, oy2] = toXY(180, R);
-    const [ix1, iy1] = toXY(0, IR);
-    const [ix2, iy2] = toXY(180, IR);
-    return <path d={`M${ix1},${iy1} L${ox1},${oy1} A${R},${R} 0 0,0 ${ox2},${oy2} L${ix2},${iy2} A${IR},${IR} 0 0,1 ${ix1},${iy1} Z`} fill="#1a2332" />;
-  };
-
-  const wedge = (half, color, opacity) => {
-    const a1 = clamp(targetAngle - half, 0, 180);
-    const a2 = clamp(targetAngle + half, 0, 180);
-    if (a2 - a1 < 0.3) return null;
-    const [ox1, oy1] = toXY(a1, R);
-    const [ox2, oy2] = toXY(a2, R);
-    const [ix1, iy1] = toXY(a1, IR);
-    const [ix2, iy2] = toXY(a2, IR);
-    const la = (a2 - a1) > 180 ? 1 : 0;
-    return <path d={`M${ix1},${iy1} L${ox1},${oy1} A${R},${R} 0 ${la},0 ${ox2},${oy2} L${ix2},${iy2} A${IR},${IR} 0 ${la},1 ${ix1},${iy1} Z`}
-      fill={color} opacity={opacity} />;
-  };
-
-  const [nx, ny] = toXY(needleAngle, R + 10);
-  const ticks = [];
-  for (let a = 0; a <= 180; a += 9) {
-    const major = a % 45 === 0;
-    const [x1, y1] = toXY(a, R);
-    const [x2, y2] = toXY(a, R - (major ? 14 : 7));
-    ticks.push(<line key={a} x1={x1} y1={y1} x2={x2} y2={y2} stroke={major ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.08)"} strokeWidth={major ? 2 : 1} />);
-  }
-
-  return (
-    <svg ref={svgRef} viewBox="0 0 600 340"
-      style={{ width: "100%", maxWidth: 580, cursor: locked ? "default" : "pointer", touchAction: "none", userSelect: "none", display: "block" }}
-      onMouseDown={down} onTouchStart={down}>
-      {fullWedge()}
-      {ticks}
-      {showTarget && <>
-        {wedge(20, "#f59e0b", 0.4)}
-        {wedge(11, "#3b82f6", 0.55)}
-        {wedge(4, "#a855f7", 0.75)}
-      </>}
-      <path d={`M${CX - R},${CY} A${R},${R} 0 0,1 ${CX + R},${CY}`} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="2.5" />
-      <path d={`M${CX - IR},${CY} A${IR},${IR} 0 0,1 ${CX + IR},${CY}`} fill="#0d1520" stroke="rgba(255,255,255,0.12)" strokeWidth="2" />
-      <line x1={CX - R - 8} y1={CY} x2={CX + R + 8} y2={CY} stroke="rgba(255,255,255,0.12)" strokeWidth="2" />
-      <line x1={CX} y1={CY} x2={nx} y2={ny} stroke={teamColor} strokeWidth="4.5" strokeLinecap="round"
-        style={{ filter: `drop-shadow(0 0 10px ${teamColor}88)`, transition: dragging ? "none" : "all 0.08s ease" }} />
-      <circle cx={CX} cy={CY} r="11" fill="#f8fafc" style={{ filter: "drop-shadow(0 0 6px rgba(255,255,255,0.3))" }} />
-      <circle cx={nx} cy={ny} r="8" fill={teamColor} stroke="white" strokeWidth="2" style={{ filter: `drop-shadow(0 0 6px ${teamColor}99)` }} />
-    </svg>
-  );
-}
 
 /* ═══════════════════════════════════════════════════════════════════ */
 const PH = { SETUP: 0, LOOK: 1, PSYCHIC: 2, GUESS: 3, COUNTER: 4, REVEAL: 5, END: 6 };
@@ -279,6 +155,13 @@ export default function WavelengthGame() {
   const [resumed, setResumed] = useState(false);
   const [disabledKeys, setDisabledKeys] = useState(() => loadDisabledPrompts());
   const [showPromptsManager, setShowPromptsManager] = useState(false);
+  const [mode, setMode] = useState(() => {
+    try { return localStorage.getItem("wavelength:mode") || "team"; } catch { return "team"; }
+  });
+  const setModePersisted = (m) => {
+    setMode(m);
+    try { localStorage.setItem("wavelength:mode", m); } catch { /* ignore */ }
+  };
 
   // Source of truth for active prompts during a draw — kept in a ref so
   // that even if pick() were called twice in the same tick, the second
@@ -591,9 +474,28 @@ export default function WavelengthGame() {
         }}>Resumed from earlier</div>
       )}
 
+      {/* ═══════════ COUPLES MODE ═══════════ */}
+      {ph === PH.SETUP && mode === "couples" && (
+        <CouplesMode disabledKeys={disabledKeys} onClose={() => setModePersisted("team")} />
+      )}
+
       {/* ═══════════ SETUP ═══════════ */}
-      {ph === PH.SETUP && (
+      {ph === PH.SETUP && mode === "team" && (
         <div style={{ textAlign: "center", maxWidth: 520, marginTop: 8, width: "100%" }}>
+          {/* Mode toggle */}
+          <div style={{
+            display: "inline-flex", padding: 4, borderRadius: 999,
+            background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+            marginBottom: 16, gap: 2,
+          }}>
+            <button onClick={() => setModePersisted("team")} style={modePill(mode === "team", "#818cf8")}>
+              Team Battle
+            </button>
+            <button onClick={() => setModePersisted("couples")} style={modePill(mode === "couples", "#f472b6")}>
+              ♥ Couples
+            </button>
+          </div>
+
           <p style={{ color: "#94a3b8", lineHeight: 1.7, fontSize: 15, margin: "0 0 4px" }}>
             The <b style={{ color: "#e2e8f0" }}>Psychic</b> sees the target on the spectrum and gives a clue.
             Teammates drag the needle. The <b style={{ color: "#e2e8f0" }}>next team</b> guesses left or right for a bonus.
@@ -1052,5 +954,16 @@ function labelBox(color, align) {
     padding: "10px 14px", borderRadius: 14,
     background: `${color}10`, border: `1px solid ${color}25`,
     textAlign: align === "right" ? "right" : "left",
+  };
+}
+
+function modePill(active, color) {
+  return {
+    padding: "8px 18px", borderRadius: 999, border: "none",
+    background: active ? color : "transparent",
+    color: active ? "#0b1018" : "#94a3b8",
+    fontWeight: 800, fontSize: 12, letterSpacing: 1.5, textTransform: "uppercase",
+    cursor: "pointer", fontFamily: "inherit",
+    transition: "all 0.15s",
   };
 }
