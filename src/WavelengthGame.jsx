@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { PROMPTS } from "./prompts";
+import { PROMPTS, promptKey } from "./prompts";
+import PromptsManager from "./PromptsManager";
 
 const DEFAULT_TEAMS = [
   { name: "Team Alpha", hue: 0, players: 3 },
@@ -174,7 +175,22 @@ function TeamCard({ t, s, score, active, won, turnsUsed, turnsTotal }) {
 const STORAGE_VERSION = 2;
 const KEY_CURRENT = "wavelength:current";
 const KEY_HISTORY = "wavelength:history";
+const KEY_DISABLED_PROMPTS = "wavelength:disabledPrompts";
 const HISTORY_MAX = 100;
+
+function loadDisabledPrompts() {
+  try {
+    const raw = localStorage.getItem(KEY_DISABLED_PROMPTS);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch { return new Set(); }
+}
+function saveDisabledPrompts(set) {
+  try {
+    localStorage.setItem(KEY_DISABLED_PROMPTS, JSON.stringify([...set]));
+  } catch { /* ignore */ }
+}
 
 function loadCurrent() {
   try {
@@ -261,6 +277,32 @@ export default function WavelengthGame() {
   const [showHistory, setShowHistory] = useState(false);
   const [historyEntries, setHistoryEntries] = useState(() => loadHistory());
   const [resumed, setResumed] = useState(false);
+  const [disabledKeys, setDisabledKeys] = useState(() => loadDisabledPrompts());
+  const [showPromptsManager, setShowPromptsManager] = useState(false);
+
+  // Source of truth for active prompts during a draw — kept in a ref so
+  // that even if pick() were called twice in the same tick, the second
+  // call sees the first call's mutation. State mirrors stay reactive for
+  // persistence and re-renders.
+  const usedRef = useRef(new Set());
+  const activeIndicesRef = useRef(null);
+  const computeActiveIndices = (disabled) => {
+    const out = [];
+    for (let i = 0; i < PROMPTS.length; i++) {
+      if (!disabled.has(promptKey(PROMPTS[i]))) out.push(i);
+    }
+    return out;
+  };
+  if (activeIndicesRef.current === null) {
+    activeIndicesRef.current = computeActiveIndices(disabledKeys);
+  }
+  useEffect(() => {
+    activeIndicesRef.current = computeActiveIndices(disabledKeys);
+  }, [disabledKeys]);
+  // Keep usedRef in sync with state (e.g. after hydration or newGame)
+  useEffect(() => { usedRef.current = used; }, [used]);
+
+  const enabledCount = activeIndicesRef.current?.length ?? PROMPTS.length;
 
   // Hydrate once on mount
   useEffect(() => {
@@ -268,7 +310,7 @@ export default function WavelengthGame() {
     if (!s) return;
     setResumed(true);
     setNumTeams(s.numTeams); setTeamConfigs(s.teamConfigs); setTurnsPerPlayer(s.turnsPerPlayer);
-    setTeams(s.teams); setUsed(s.used);
+    setTeams(s.teams); setUsed(s.used); usedRef.current = s.used;
     setPi(s.pi); setTarget(s.target); setNeedle(s.needle);
     // Per UX choice: skip the LOOK countdown on resume, jump to PSYCHIC
     setPh(s.ph === PH.LOOK ? PH.PSYCHIC : s.ph);
@@ -311,12 +353,24 @@ export default function WavelengthGame() {
   const totalRounds = turnsPerTeam.reduce((a, b) => a + b, 0);
 
   const pick = useCallback(() => {
-    let av = PROMPTS.map((_, i) => i).filter(i => !used.has(i));
-    if (!av.length) { setUsed(new Set()); av = PROMPTS.map((_, i) => i); }
+    const enabled = activeIndicesRef.current || [];
+    // Available = enabled and not yet used this game (read from ref, not state — synchronous)
+    let av = enabled.filter(i => !usedRef.current.has(i));
+    // Deck exhausted — reshuffle
+    if (av.length === 0) {
+      usedRef.current = new Set();
+      av = [...enabled];
+    }
+    // Edge case: zero enabled prompts (shouldn't happen — Start Game is gated)
+    if (av.length === 0) av = PROMPTS.map((_, i) => i);
     const idx = av[Math.floor(Math.random() * av.length)];
-    setUsed(p => new Set([...p, idx]));
+    // Mutate the ref synchronously so subsequent calls in same tick see it
+    const next = new Set(usedRef.current);
+    next.add(idx);
+    usedRef.current = next;
+    setUsed(next);
     return idx;
-  }, [used]);
+  }, []);
 
   const beginLookAway = useCallback(() => {
     setPi(pick());
@@ -439,6 +493,7 @@ export default function WavelengthGame() {
 
   const newGame = () => {
     clearCurrent();
+    usedRef.current = new Set();
     setScores([]); setRd(0); setAt(0); setUsed(new Set());
     setPi(null); setRs(null); setCgDir(null); setCgCorrect(null); setCgTeamIdx(null);
     setWinner(null); setTurnsUsed([]); setCd(0); setPaused(false);
@@ -597,10 +652,28 @@ export default function WavelengthGame() {
           </div>
 
           <p style={{ fontSize: 12, color: "#475569", margin: "0 0 20px" }}>
-            {activeTeams.reduce((sum, t) => sum + t.players * turnsPerPlayer, 0)} total rounds
+            {activeTeams.reduce((sum, t) => sum + t.players * turnsPerPlayer, 0)} total rounds · {enabledCount} of {PROMPTS.length} prompts active
           </p>
 
-          <button onClick={startGame} style={btn("#818cf8")}>Start Game</button>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+            <button
+              onClick={startGame}
+              disabled={enabledCount === 0}
+              style={{
+                ...btn("#818cf8"),
+                opacity: enabledCount === 0 ? 0.4 : 1,
+                cursor: enabledCount === 0 ? "not-allowed" : "pointer",
+              }}
+            >Start Game</button>
+            <button onClick={() => setShowPromptsManager(true)} style={ghost}>
+              View Prompt Cards
+            </button>
+          </div>
+          {enabledCount === 0 && (
+            <p style={{ fontSize: 12, color: "#f87171", marginTop: 12 }}>
+              All prompts disabled — enable at least one to play.
+            </p>
+          )}
         </div>
       )}
 
@@ -792,6 +865,20 @@ export default function WavelengthGame() {
             </div>
           )}
         </Modal>
+      )}
+
+      {/* ═══════════ PROMPTS MANAGER ═══════════ */}
+      {showPromptsManager && (
+        <PromptsManager
+          initialDisabled={disabledKeys}
+          onSave={(next) => {
+            setDisabledKeys(next);
+            saveDisabledPrompts(next);
+            // Recompute active indices immediately so a game can start right away
+            activeIndicesRef.current = computeActiveIndices(next);
+          }}
+          onClose={() => setShowPromptsManager(false)}
+        />
       )}
 
       {/* ═══════════ ACTIVE GAME ═══════════ */}
