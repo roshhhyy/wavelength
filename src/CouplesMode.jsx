@@ -266,8 +266,8 @@ export default function CouplesMode({ onClose, disabledKeys }) {
 
         {/* Level grid */}
         <div style={{
-          display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))",
-          gap: 10, width: "100%", maxWidth: 540, marginBottom: 24,
+          display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))",
+          gap: 8, width: "100%", maxWidth: 540, marginBottom: 24,
         }}>
           {COUPLES_LEVELS.map((lvl, idx) => {
             const unlocked = lvl.level <= highestUnlocked;
@@ -630,12 +630,13 @@ function RoundBreakdown({ rounds }) {
 /* ═══════════════════════ shared styles ════════════════════════ */
 
 const pageStyle = {
-  minHeight: "100vh",
+  position: "fixed", inset: 0, zIndex: 50,
+  overflowY: "auto", overflowX: "hidden",
   background: "radial-gradient(ellipse at 50% 0%, #1f1d2e 0%, #0b0a14 70%)",
   fontFamily: "'Outfit', 'DM Sans', system-ui, sans-serif",
   color: "#e2e8f0",
   display: "flex", flexDirection: "column", alignItems: "center",
-  padding: "20px 16px 48px",
+  padding: "max(16px, env(safe-area-inset-top)) 14px max(48px, env(safe-area-inset-bottom))",
 };
 
 const titleStyle = {
