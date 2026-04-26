@@ -777,6 +777,7 @@ export default function WavelengthGame() {
           {historyEntries.length > 0 && (
             <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}>
               <button onClick={() => {
+                setShowHistory(false);
                 setConfirmAction({
                   title: "Clear all history?",
                   message: `Permanently delete all ${historyEntries.length} past game${historyEntries.length === 1 ? "" : "s"}.`,
