@@ -119,7 +119,7 @@ const scoreClr = s => s === 4 ? "#c084fc" : s === 3 ? "#60a5fa" : s === 2 ? "#fb
    ═══════════════════════════════════════════════════════════════════ */
 function Dial({ needleAngle, targetAngle, showTarget, onNeedleChange, locked, teamColor }) {
   const svgRef = useRef(null);
-  const dragging = useRef(false);
+  const [dragging, setDragging] = useState(false);
 
   const toXY = (deg, r) => {
     const rad = deg2rad(180 - deg);
@@ -138,19 +138,19 @@ function Dial({ needleAngle, targetAngle, showTarget, onNeedleChange, locked, te
 
   const down = useCallback(e => {
     if (locked) return;
-    e.preventDefault(); dragging.current = true;
+    e.preventDefault(); setDragging(true);
     const p = e.touches ? e.touches[0] : e;
     onNeedleChange(ptrToAngle(p.clientX, p.clientY));
   }, [locked, onNeedleChange, ptrToAngle]);
 
   const move = useCallback(e => {
-    if (!dragging.current || locked) return;
+    if (!dragging || locked) return;
     e.preventDefault();
     const p = e.touches ? e.touches[0] : e;
     onNeedleChange(ptrToAngle(p.clientX, p.clientY));
-  }, [locked, onNeedleChange, ptrToAngle]);
+  }, [dragging, locked, onNeedleChange, ptrToAngle]);
 
-  const up = useCallback(() => { dragging.current = false; }, []);
+  const up = useCallback(() => { setDragging(false); }, []);
 
   useEffect(() => {
     window.addEventListener("mousemove", move);
@@ -206,7 +206,7 @@ function Dial({ needleAngle, targetAngle, showTarget, onNeedleChange, locked, te
       <path d={`M${CX - IR},${CY} A${IR},${IR} 0 0,1 ${CX + IR},${CY}`} fill="#0d1520" stroke="rgba(255,255,255,0.12)" strokeWidth="2" />
       <line x1={CX - R - 8} y1={CY} x2={CX + R + 8} y2={CY} stroke="rgba(255,255,255,0.12)" strokeWidth="2" />
       <line x1={CX} y1={CY} x2={nx} y2={ny} stroke={teamColor} strokeWidth="4.5" strokeLinecap="round"
-        style={{ filter: `drop-shadow(0 0 10px ${teamColor}88)`, transition: dragging.current ? "none" : "all 0.08s ease" }} />
+        style={{ filter: `drop-shadow(0 0 10px ${teamColor}88)`, transition: dragging ? "none" : "all 0.08s ease" }} />
       <circle cx={CX} cy={CY} r="11" fill="#f8fafc" style={{ filter: "drop-shadow(0 0 6px rgba(255,255,255,0.3))" }} />
       <circle cx={nx} cy={ny} r="8" fill={teamColor} stroke="white" strokeWidth="2" style={{ filter: `drop-shadow(0 0 6px ${teamColor}99)` }} />
     </svg>
@@ -243,6 +243,68 @@ function TeamCard({ t, s, score, active, won, turnsUsed, turnsTotal }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   PERSISTENCE
+   ═══════════════════════════════════════════════════════════════════ */
+const STORAGE_VERSION = 1;
+const KEY_CURRENT = "wavelength:current";
+const KEY_HISTORY = "wavelength:history";
+const HISTORY_MAX = 100;
+
+function loadCurrent() {
+  try {
+    const raw = localStorage.getItem(KEY_CURRENT);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (d.version !== STORAGE_VERSION) return null;
+    return { ...d, used: new Set(d.used || []) };
+  } catch { return null; }
+}
+function saveCurrent(s) {
+  try {
+    localStorage.setItem(KEY_CURRENT, JSON.stringify({
+      ...s, version: STORAGE_VERSION, used: [...s.used],
+    }));
+  } catch { /* ignore */ }
+}
+function clearCurrent() {
+  try { localStorage.removeItem(KEY_CURRENT); } catch { /* ignore */ }
+}
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(KEY_HISTORY);
+    if (!raw) return [];
+    const d = JSON.parse(raw);
+    return Array.isArray(d) ? d : [];
+  } catch { return []; }
+}
+function appendHistory(entry) {
+  try {
+    const next = [{ ...entry, version: STORAGE_VERSION }, ...loadHistory()].slice(0, HISTORY_MAX);
+    localStorage.setItem(KEY_HISTORY, JSON.stringify(next));
+  } catch { /* ignore */ }
+}
+
+function Modal({ children, onClose }) {
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(5,8,14,0.78)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 100, padding: 20, backdropFilter: "blur(4px)",
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: "linear-gradient(180deg, #161e2f 0%, #0f1422 100%)",
+        border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20,
+        padding: "24px 28px", maxWidth: 460, width: "100%",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.6)", maxHeight: "85vh",
+        display: "flex", flexDirection: "column",
+      }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    MAIN
    ═══════════════════════════════════════════════════════════════════ */
 export default function WavelengthGame() {
@@ -268,6 +330,50 @@ export default function WavelengthGame() {
   const [cd, setCd] = useState(0);
   const [paused, setPaused] = useState(false);
   const [skipAvailable, setSkipAvailable] = useState(true);
+  const [startedAt, setStartedAt] = useState(null);
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState(() => loadHistory());
+  const [resumed, setResumed] = useState(false);
+
+  // Hydrate once on mount
+  useEffect(() => {
+    const s = loadCurrent();
+    if (!s) return;
+    setResumed(true);
+    setNumTeams(s.numTeams); setTeamConfigs(s.teamConfigs); setTurnsPerPlayer(s.turnsPerPlayer);
+    setTeams(s.teams); setUsed(s.used);
+    setPi(s.pi); setTarget(s.target); setNeedle(s.needle);
+    // Per UX choice: skip the LOOK countdown on resume, jump to PSYCHIC
+    setPh(s.ph === PH.LOOK ? PH.PSYCHIC : s.ph);
+    setScores(s.scores); setRs(s.rs); setRd(s.rd); setAt(s.at);
+    setCgDir(s.cgDir); setCgCorrect(s.cgCorrect); setCgTeamIdx(s.cgTeamIdx);
+    setWinner(s.winner); setTurnsUsed(s.turnsUsed); setPaused(false);
+    setSkipAvailable(s.skipAvailable ?? true);
+    setStartedAt(s.startedAt);
+  }, []);
+
+  // Auto-dismiss resume toast
+  useEffect(() => {
+    if (!resumed) return;
+    const t = setTimeout(() => setResumed(false), 3500);
+    return () => clearTimeout(t);
+  }, [resumed]);
+
+  // Persist on relevant changes (skip SETUP/END and when no game in progress)
+  useEffect(() => {
+    if (ph === PH.SETUP || ph === PH.END || teams.length === 0) return;
+    saveCurrent({
+      startedAt, numTeams, teamConfigs, turnsPerPlayer, teams, used,
+      pi, target, needle, ph, scores, rs, rd, at,
+      cgDir, cgCorrect, cgTeamIdx, winner, turnsUsed, paused, skipAvailable,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- needle omitted: drag fires per pointer-move; persisted on next other change
+  }, [
+    startedAt, numTeams, teamConfigs, turnsPerPlayer, teams, used,
+    pi, target, ph, scores, rs, rd, at,
+    cgDir, cgCorrect, cgTeamIdx, winner, turnsUsed, paused, skipAvailable,
+  ]);
 
   const activeTeams = teamConfigs.slice(0, numTeams);
 
@@ -351,26 +457,51 @@ export default function WavelengthGame() {
     setPh(PH.REVEAL);
   };
 
+  const endGame = useCallback((winnerIdx) => {
+    appendHistory({
+      startedAt: startedAt || Date.now(),
+      endedAt: Date.now(),
+      teams: teams.map(t => ({ name: t.name, hue: t.hue, players: t.players })),
+      scores: [...scores],
+      winnerIdx,
+      turnsPerPlayer,
+      roundsPlayed: rd,
+    });
+    setHistoryEntries(loadHistory());
+    clearCurrent();
+    setWinner(winnerIdx);
+    setPh(PH.END);
+  }, [startedAt, teams, scores, turnsPerPlayer, rd]);
+
   const nextRound = () => {
     const allDone = turnsUsed.every((tu, i) => tu >= teams[i].players * turnsPerPlayer);
     if (allDone) {
       const mx = Math.max(...scores);
       const ws = scores.map((s, i) => s === mx ? i : -1).filter(i => i >= 0);
-      setWinner(ws.length === 1 ? ws[0] : -1);
-      setPh(PH.END);
+      endGame(ws.length === 1 ? ws[0] : -1);
       return;
     }
     const nt = findNextTeam(at, turnsUsed);
-    if (nt < 0) { setPh(PH.END); return; }
+    if (nt < 0) { endGame(-1); return; }
     setAt(nt);
     beginLookAway();
   };
 
   const newGame = () => {
+    clearCurrent();
     setScores([]); setRd(0); setAt(0); setUsed(new Set());
     setPi(null); setRs(null); setCgDir(null); setCgCorrect(null); setCgTeamIdx(null);
     setWinner(null); setTurnsUsed([]); setCd(0); setPaused(false);
-    setSkipAvailable(true); setTeams([]); setPh(PH.SETUP);
+    setSkipAvailable(true); setTeams([]); setStartedAt(null); setPh(PH.SETUP);
+  };
+
+  const requestNewGame = () => {
+    setConfirmAction({
+      title: "Start a new game?",
+      message: "This ends the current game without recording it. Are you sure?",
+      confirmLabel: "End & Start New",
+      onConfirm: () => { newGame(); setConfirmAction(null); },
+    });
   };
 
   const startGame = () => {
@@ -379,6 +510,7 @@ export default function WavelengthGame() {
     setScores(t.map(() => 0));
     setTurnsUsed(t.map(() => 0));
     setRd(0); setAt(0); setWinner(null);
+    setStartedAt(Date.now());
     beginLookAway();
   };
 
@@ -417,6 +549,35 @@ export default function WavelengthGame() {
         background: "linear-gradient(135deg, #f472b6 0%, #818cf8 40%, #38bdf8 70%, #34d399 100%)",
         WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
       }}>Wavelength</h1>
+
+      {/* Resume toast */}
+      {resumed && (
+        <div onClick={() => setResumed(false)} style={{
+          position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)",
+          padding: "8px 18px", borderRadius: 999, fontSize: 12, fontWeight: 700,
+          background: "rgba(56,189,248,0.12)", border: "1px solid rgba(56,189,248,0.4)",
+          color: "#7dd3fc", letterSpacing: 1, textTransform: "uppercase",
+          zIndex: 90, cursor: "pointer", backdropFilter: "blur(8px)",
+        }}>Resumed from earlier</div>
+      )}
+
+      {/* Top-right utility links */}
+      <div style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 8 }}>
+        {ph !== PH.SETUP && ph !== PH.END && (
+          <button onClick={requestNewGame} style={{
+            padding: "6px 14px", borderRadius: 999, fontSize: 11, fontWeight: 700,
+            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
+            color: "#94a3b8", cursor: "pointer", letterSpacing: 1, textTransform: "uppercase",
+          }}>New Game</button>
+        )}
+        {historyEntries.length > 0 && (
+          <button onClick={() => setShowHistory(true)} style={{
+            padding: "6px 14px", borderRadius: 999, fontSize: 11, fontWeight: 700,
+            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
+            color: "#94a3b8", cursor: "pointer", letterSpacing: 1, textTransform: "uppercase",
+          }}>History ({historyEntries.length})</button>
+        )}
+      </div>
 
       {/* ═══════════ SETUP ═══════════ */}
       {ph === PH.SETUP && (
@@ -574,6 +735,90 @@ export default function WavelengthGame() {
         </div>
       )}
 
+      {/* ═══════════ CONFIRM MODAL ═══════════ */}
+      {confirmAction && (
+        <Modal onClose={() => setConfirmAction(null)}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#f8fafc", marginBottom: 8 }}>
+            {confirmAction.title}
+          </div>
+          <div style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.6, marginBottom: 22 }}>
+            {confirmAction.message}
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button onClick={() => setConfirmAction(null)} style={ghost}>Cancel</button>
+            <button onClick={confirmAction.onConfirm} style={btn("#ef4444")}>
+              {confirmAction.confirmLabel || "Confirm"}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ═══════════ HISTORY MODAL ═══════════ */}
+      {showHistory && (
+        <Modal onClose={() => setShowHistory(false)}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: "#f8fafc" }}>Game History</div>
+            <button onClick={() => setShowHistory(false)} style={{
+              background: "transparent", border: "none", color: "#64748b",
+              fontSize: 22, cursor: "pointer", padding: 4, lineHeight: 1,
+            }}>×</button>
+          </div>
+          {historyEntries.length === 0 ? (
+            <div style={{ color: "#64748b", fontSize: 14, padding: "20px 0" }}>No games played yet.</div>
+          ) : (
+            <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+              {historyEntries.map((g, gi) => {
+                const winnerName = g.winnerIdx >= 0 ? g.teams[g.winnerIdx]?.name : null;
+                const winnerHue = g.winnerIdx >= 0 ? g.teams[g.winnerIdx]?.hue : 0;
+                const ws = winnerName ? ts(winnerHue) : null;
+                const date = new Date(g.endedAt);
+                return (
+                  <div key={gi} style={{
+                    padding: "10px 14px", borderRadius: 12,
+                    background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: ws ? ws.color : "#94a3b8" }}>
+                        {winnerName ? `${winnerName} won` : "Tie game"}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#64748b" }}>
+                        {date.toLocaleDateString()} {date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 12 }}>
+                      {g.teams.map((t, ti) => {
+                        const s = ts(t.hue);
+                        return (
+                          <span key={ti} style={{ color: ti === g.winnerIdx ? s.color : "#94a3b8" }}>
+                            {t.name}: <b style={{ color: ti === g.winnerIdx ? s.color : "#cbd5e1" }}>{g.scores[ti]}</b>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {historyEntries.length > 0 && (
+            <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={() => {
+                setConfirmAction({
+                  title: "Clear all history?",
+                  message: `Permanently delete all ${historyEntries.length} past game${historyEntries.length === 1 ? "" : "s"}.`,
+                  confirmLabel: "Delete All",
+                  onConfirm: () => {
+                    try { localStorage.removeItem(KEY_HISTORY); } catch { /* ignore */ }
+                    setHistoryEntries([]);
+                    setConfirmAction(null);
+                  },
+                });
+              }} style={{ ...ghost, fontSize: 12, padding: "8px 16px" }}>Clear History</button>
+            </div>
+          )}
+        </Modal>
+      )}
+
       {/* ═══════════ ACTIVE GAME ═══════════ */}
       {(ph === PH.PSYCHIC || ph === PH.GUESS || ph === PH.COUNTER || ph === PH.REVEAL) && prompt && (
         <>
@@ -696,7 +941,6 @@ export default function WavelengthGame() {
                 )}
                 <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
                   <button onClick={nextRound} style={btn("#818cf8")}>Next Round</button>
-                  <button onClick={newGame} style={ghost}>New Game</button>
                 </div>
               </div>
             )}
