@@ -4,8 +4,9 @@ A browser-based party game inspired by *Wavelength*. The Psychic sees a hidden t
 
 **Play it live:** [roshhhyy.github.io/wavelength](https://roshhhyy.github.io/wavelength/)
 
-Two modes:
+Three modes:
 
+- **⚡ Quick Play** — zero setup, the fastest way in. Pass the phone around an arbitrary group: one person is the psychic each round, everyone else guesses, then it hands off to the next person. Endless and cooperative — the group shares one running score (total / average per round / best round). Front-and-center on the home screen.
 - **Team Battle** — 2–6 teams, take turns being psychic. The next team in rotation can bet left/right of the guess for a bonus point. Configurable players per team and turns per player.
 - **♥ Couples** — two-player co-op. Strict-alternation psychic role across 10 hand-tuned levels. Hit the target score before you run out of prompts. Star ratings (1/2/3) per level reward consistency. L1 is forgiving; L10 ("Mythic") demands bullseyes only.
 
@@ -47,9 +48,10 @@ Analytics are wired through Cloudflare Web Analytics (script tag at the bottom o
     ├── levels.js             # Couples-mode level definitions + starsForScore()
     ├── dialMath.js           # geometry constants + scoring helpers + ts() palette
     ├── Dial.jsx              # the SVG dial component (drag-to-rotate)
-    ├── WavelengthGame.jsx    # team mode + entry point + setup screen + mode toggle
+    ├── WavelengthGame.jsx    # team mode + entry point + setup screen + mode toggle + Quick Play CTA
     ├── PromptsManager.jsx    # enable/disable prompts UI (per-category, with detail view)
-    └── CouplesMode.jsx       # full Couples-mode flow (menu, levels, win/lose screens)
+    ├── CouplesMode.jsx       # full Couples-mode flow (menu, levels, win/lose screens)
+    └── QuickPlay.jsx         # full Quick Play flow (no-setup pass-the-phone loop)
 ```
 
 All UI is inline JS-object styles — no CSS framework. Component organization is flat (no nested folders). Most files are self-contained except for the shared `dialMath.js` and `Dial.jsx`, which both modes consume.
@@ -129,6 +131,10 @@ The whole Couples flow. Renders as a `position: fixed` overlay so it owns the vi
 
 Honors the global Prompt Cards toggles. If the difficulty pool for a level is too narrow due to user disabling, falls back to any non-disabled prompt.
 
+### [`src/QuickPlay.jsx`](src/QuickPlay.jsx)
+
+The Quick Play flow, also a `position: fixed` overlay that owns the viewport. No setup screen — clicking the home-screen CTA drops you straight into round one. Phases: `HANDOFF → PSYCHIC → GUESS → REVEAL`, then the loop repeats indefinitely. Player-agnostic by design: it never asks how many people are playing or who they are — the handoff screen just says "pass to the next psychic," so any number of players can rotate. The whole group shares one cooperative score (total / average / best), shown in a stat strip up top. One skip per round; 3-second look-away countdown. The deck is a shuffled list of enabled prompt indices that draws without repeats and reshuffles when exhausted; mount-time round kickoff is StrictMode-safe via a ref guard. Session state persists so a mid-game refresh resumes in place. Honors the global Prompt Cards toggles and shows a graceful empty state if every prompt is disabled.
+
 ## Persistence
 
 All state lives in `localStorage` (no backend). Keys:
@@ -139,7 +145,8 @@ All state lives in `localStorage` (no backend). Keys:
 | `wavelength:history` | Last 100 completed team games (date, scores, winner) | "Clear History" button |
 | `wavelength:disabledPrompts` | User's prompt-toggle state, keyed by content hash | Never (manual via Prompt Cards) |
 | `wavelength:couples` | P1/P2 names + per-level `{ stars, bestScore }` | Never (manual via dev tools) |
-| `wavelength:mode` | Last-used mode (`team` or `couples`) so the right one shows on next visit | Mode toggle |
+| `wavelength:quick` | In-progress Quick Play session (running score + current round) so a refresh resumes | "End" / "End session" |
+| `wavelength:mode` | Last-used mode (`team`, `couples`, or `quick`) so the right one shows on next visit | Mode toggle / entering Quick Play |
 
 All loaders are wrapped in try/catch with a `version` field so a schema bump cleanly discards stale saves.
 

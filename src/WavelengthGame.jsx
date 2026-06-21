@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { PROMPTS, promptKey } from "./prompts";
 import PromptsManager from "./PromptsManager";
 import CouplesMode from "./CouplesMode";
+import QuickPlay from "./QuickPlay";
 import { Dial } from "./Dial";
 import { ts, randomTarget, getScore, scoreLbl, scoreClr } from "./dialMath";
 
@@ -474,6 +475,11 @@ export default function WavelengthGame() {
         }}>Resumed from earlier</div>
       )}
 
+      {/* ═══════════ QUICK PLAY ═══════════ */}
+      {ph === PH.SETUP && mode === "quick" && (
+        <QuickPlay disabledKeys={disabledKeys} onClose={() => setModePersisted("team")} />
+      )}
+
       {/* ═══════════ COUPLES MODE ═══════════ */}
       {ph === PH.SETUP && mode === "couples" && (
         <CouplesMode disabledKeys={disabledKeys} onClose={() => setModePersisted("team")} />
@@ -482,6 +488,38 @@ export default function WavelengthGame() {
       {/* ═══════════ SETUP ═══════════ */}
       {ph === PH.SETUP && mode === "team" && (
         <div style={{ textAlign: "center", maxWidth: 520, marginTop: 8, width: "100%" }}>
+          {/* Quick Play — the fastest way in: no setup, just pass the phone */}
+          <button
+            onClick={() => setModePersisted("quick")}
+            disabled={enabledCount === 0}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 14,
+              width: "100%", padding: "18px 24px", borderRadius: 20, border: "none",
+              background: "linear-gradient(135deg, #fbbf24 0%, #fb923c 60%, #f97316 100%)",
+              color: "#1a1206", cursor: enabledCount === 0 ? "not-allowed" : "pointer",
+              opacity: enabledCount === 0 ? 0.4 : 1,
+              boxShadow: "0 8px 30px rgba(251,146,60,0.35)", textAlign: "left",
+              fontFamily: "inherit", marginBottom: 14,
+            }}
+          >
+            <span style={{ fontSize: 30, lineHeight: 1 }}>⚡</span>
+            <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+              <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: 1 }}>Quick Play</span>
+              <span style={{ fontSize: 12, fontWeight: 700, opacity: 0.82 }}>
+                No setup · pass the phone, one clue, everyone guesses
+              </span>
+            </span>
+          </button>
+
+          <div style={{
+            display: "flex", alignItems: "center", gap: 12, margin: "0 0 16px",
+            color: "#475569", fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700,
+          }}>
+            <span style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+            or set up a full game
+            <span style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+          </div>
+
           {/* Mode toggle */}
           <div style={{
             display: "inline-flex", padding: 4, borderRadius: 999,
